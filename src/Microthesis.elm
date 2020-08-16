@@ -1,30 +1,91 @@
-module Microthesis exposing (run)
+module Microthesis exposing
+    ( RandomRun
+    , Test, test
+    , Options, defaultOptions
+    , run, runWith, TestResult(..), Bug(..)
+    )
 
+{-|
+
+@docs RandomRun
+
+@docs Test, test
+
+@docs Options, defaultOptions
+
+@docs run, runWith, TestResult, Bug
+
+-}
+
+import Dict exposing (Dict)
 import Microthesis.Generator as Generator exposing (GenResult(..), Generator)
 import Microthesis.PRNG as PRNG
 import Microthesis.RandomRun exposing (RandomRun)
+import Microthesis.Shrink as Shrink exposing (ShrinkCommand)
 import Random
 
 
-run : Test a -> TestResult a
-run test =
-    test
-        |> initLoop
+type alias Options =
+    { maxExamples : Int
+    , showShrinkHistory : Bool
+    }
+
+
+defaultOptions : Options
+defaultOptions =
+    { maxExamples = 100
+    , showShrinkHistory = False
+    }
+
+
+run : Int -> Test a -> TestResult a
+run seed test_ =
+    runWith defaultOptions seed test_
+
+
+runWith : Options -> Int -> Test a -> TestResult a
+runWith options seed test_ =
+    initLoop options seed test_
         |> generateAndTest
         |> shrink
         |> toResult
 
 
-type alias Test a =
-    { userTestFn : a -> Bool
-    , generator : Generator a
-    }
+type Test a
+    = Test
+        { label : String
+        , userTestFn : a -> Bool
+        , generator : Generator a
+        }
+
+
+test : String -> Generator a -> (a -> Bool) -> Test a
+test label generator userTestFn =
+    Test
+        { label = label
+        , generator = generator
+        , userTestFn = userTestFn
+        }
+
+
+type alias RandomRun =
+    List Int
 
 
 type TestResult a
     = Passes
     | FailsWith a
-    | CannotGenerateValues
+    | FailsWithShrinks
+        { finalValue : a
+        , finalRun : RandomRun
+        , history :
+            List
+                { value : a
+                , run : RandomRun
+                , shrinkerUsed : String
+                }
+        }
+    | CannotGenerateValues { mostCommonRejections : List String }
     | MicrothesisBug Bug
 
 
@@ -34,8 +95,11 @@ type Bug
 
 type alias LoopState a =
     -- user input
-    { userTestFn : a -> Bool
+    { label : String
+    , userTestFn : a -> Bool
     , generator : Generator a
+    , options : Options
+    , maxGenerationAttempts : Int
     , seed : Random.Seed
 
     -- actual loop state
@@ -43,40 +107,35 @@ type alias LoopState a =
     , generationAttempts : Int
     , valuesGenerated : Int
     , passingTests : Int
+    , rejections : Dict String Int
+    , shrinkHistory : List ( a, RandomRun, Maybe ShrinkCommand )
     }
 
 
 type Status a
     = Undecided
     | Passing
-    | FailingWith ( a, RandomRun )
+    | FailingWith
+        { value : a
+        , randomRun : RandomRun
+        }
     | UnableToGenerate
 
 
-initialSeed : Int
-initialSeed =
-    0
-
-
-maxValuesGenerated : Int
-maxValuesGenerated =
-    100
-
-
-maxGenerationAttempts : Int
-maxGenerationAttempts =
-    maxValuesGenerated * 10
-
-
-initLoop : Test a -> LoopState a
-initLoop test =
-    { userTestFn = test.userTestFn
-    , generator = test.generator
-    , seed = Random.initialSeed initialSeed
+initLoop : Options -> Int -> Test a -> LoopState a
+initLoop options seed (Test test_) =
+    { label = test_.label
+    , userTestFn = test_.userTestFn
+    , generator = test_.generator
+    , options = options
+    , maxGenerationAttempts = options.maxExamples * 10
+    , seed = Random.initialSeed seed
     , status = Undecided
     , generationAttempts = 0
     , valuesGenerated = 0
     , passingTests = 0
+    , rejections = Dict.empty
+    , shrinkHistory = []
     }
 
 
@@ -94,7 +153,12 @@ generateAndTest state =
 
                 else
                     newState
-                        |> setStatus (FailingWith ( value, counterexampleRun ))
+                        |> setStatus
+                            (FailingWith
+                                { value = value
+                                , randomRun = counterexampleRun
+                                }
+                            )
 
     else if sawPassingTests state then
         setStatus Passing state
@@ -105,14 +169,14 @@ generateAndTest state =
 
 shouldTryToGenerate : LoopState a -> Bool
 shouldTryToGenerate state =
-    (state.valuesGenerated < maxValuesGenerated)
-        && (state.generationAttempts < maxGenerationAttempts)
+    (state.valuesGenerated < state.options.maxExamples)
+        && (state.generationAttempts < state.maxGenerationAttempts)
 
 
 generate : LoopState a -> Result (LoopState a) ( RandomRun, a, LoopState a )
 generate state =
     case Generator.run state.generator (PRNG.random state.seed) of
-        Generated value prng ->
+        Generated { value, prng } ->
             Ok
                 ( PRNG.getRun prng
                 , value
@@ -125,14 +189,31 @@ generate state =
                   }
                 )
 
-        Rejected prng ->
+        Rejected { reason, prng } ->
             Err
                 { state
                     | generationAttempts = state.generationAttempts + 1
                     , seed =
                         PRNG.getSeed prng
                             |> Maybe.withDefault state.seed
+                    , rejections =
+                        state.rejections
+                            |> addRejection reason
                 }
+
+
+addRejection : String -> Dict String Int -> Dict String Int
+addRejection reason rejections =
+    rejections
+        |> Dict.update reason
+            (\maybeN ->
+                case maybeN of
+                    Just n ->
+                        Just (n + 1)
+
+                    Nothing ->
+                        Just 1
+            )
 
 
 setStatus : Status a -> LoopState a -> LoopState a
@@ -160,8 +241,38 @@ toResult state =
         Passing ->
             Passes
 
-        FailingWith ( value, _ ) ->
-            FailsWith value
+        FailingWith { value, randomRun } ->
+            if state.options.showShrinkHistory then
+                FailsWithShrinks
+                    { finalValue = value
+                    , finalRun = randomRun
+                    , history =
+                        state.shrinkHistory
+                            |> List.reverse
+                            |> List.map
+                                (\( value_, run_, maybeCmd ) ->
+                                    { value = value_
+                                    , run = run_
+                                    , shrinkerUsed =
+                                        case maybeCmd of
+                                            Nothing ->
+                                                "Initial"
+
+                                            Just cmd ->
+                                                Shrink.cmdLabel cmd
+                                    }
+                                )
+                    }
+
+            else
+                FailsWith value
 
         UnableToGenerate ->
             CannotGenerateValues
+                { mostCommonRejections =
+                    state.rejections
+                        |> Dict.toList
+                        |> List.sortBy Tuple.second
+                        |> List.take 3
+                        |> List.map Tuple.first
+                }

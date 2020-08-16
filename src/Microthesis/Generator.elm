@@ -20,18 +20,29 @@ runWith counterexample generator =
 
 
 type GenResult a
-    = Generated a PRNG
-    | Rejected PRNG
+    = Generated
+        { value : a
+        , prng : PRNG
+        }
+    | Rejected
+        { -- TODO might have to do `reason : Maybe String`
+          -- if the "hardcoded ran out" reasons show up because of shrinking
+          reason : String
+        , prng : PRNG
+        }
 
 
 mapResult : (a -> b) -> GenResult a -> GenResult b
 mapResult fn result =
     case result of
-        Generated value prng ->
-            Generated (fn value) prng
+        Generated { value, prng } ->
+            Generated
+                { value = fn value
+                , prng = prng
+                }
 
-        Rejected prng ->
-            Rejected prng
+        Rejected rejected ->
+            Rejected rejected
 
 
 {-| Based on the PRNG value:
@@ -51,24 +62,29 @@ rollDice diceGenerator =
                             Random.step diceGenerator random.seed
                     in
                     Generated
-                        diceRoll
-                        (Random
-                            { seed = newSeed
-                            , run = RandomRun.append diceRoll random.run
-                            }
-                        )
+                        { value = diceRoll
+                        , prng =
+                            Random
+                                { seed = newSeed
+                                , run = RandomRun.append diceRoll random.run
+                                }
+                        }
 
                 Hardcoded hardcoded ->
                     case RandomRun.nextChoice hardcoded.unusedPart of
                         Nothing ->
-                            Rejected prng
+                            Rejected
+                                { reason = "Hardcoded PRNG run out of numbers"
+                                , prng = prng
+                                }
 
                         Just ( hardcodedChoice, restOfChoices ) ->
                             Generated
-                                hardcodedChoice
-                                (Hardcoded
-                                    { hardcoded | unusedPart = restOfChoices }
-                                )
+                                { value = hardcodedChoice
+                                , prng =
+                                    Hardcoded
+                                        { hardcoded | unusedPart = restOfChoices }
+                                }
 
 
 map : (a -> b) -> Generator a -> Generator b
