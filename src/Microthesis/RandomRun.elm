@@ -2,6 +2,7 @@ module Microthesis.RandomRun exposing
     ( Chunk
     , RandomRun
     , append
+    , compare
     , deleteChunk
     , empty
     , get
@@ -156,3 +157,15 @@ get index randomRun =
 set : Int -> Int -> RandomRun -> RandomRun
 set index value randomRun =
     List.Extra.setAt index value randomRun
+
+
+sortKey : RandomRun -> ( Int, List Int )
+sortKey run =
+    ( List.length run
+    , run
+    )
+
+
+compare : RandomRun -> RandomRun -> Order
+compare a b =
+    Basics.compare (sortKey a) (sortKey b)

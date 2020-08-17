@@ -337,26 +337,23 @@ tryShrink :
         , finalState : LoopState a
         }
 tryShrink { old, new, cmd } state =
+    let
+        nope =
+            { foundImprovement = False
+            , finalRun = old
+            , finalState = state
+            }
+    in
     if old == new then
-        { foundImprovement = False
-        , finalRun = old
-        , finalState = state
-        }
+        nope
 
     else
-        case
-            Generator.run
-                state.generator
-                (PRNG.hardcoded new)
-        of
+        case Generator.run state.generator (PRNG.hardcoded new) of
             Generated { value } ->
                 if state.userTestFn value then
-                    { foundImprovement = False
-                    , finalRun = old
-                    , finalState = state
-                    }
+                    nope
 
-                else
+                else if RandomRun.compare old new == GT then
                     { foundImprovement = True
                     , finalRun = new
                     , finalState =
@@ -370,11 +367,11 @@ tryShrink { old, new, cmd } state =
                                 )
                     }
 
+                else
+                    nope
+
             Rejected _ ->
-                { foundImprovement = False
-                , finalRun = old
-                , finalState = state
-                }
+                nope
 
 
 runCmds : List ShrinkCmd -> RandomRun -> LoopState a -> ( RandomRun, LoopState a )
