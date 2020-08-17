@@ -272,9 +272,7 @@ shrinkWhileProgress randomRun state =
 shrinkOnce : RandomRun -> LoopState a -> ( RandomRun, LoopState a )
 shrinkOnce randomRun state =
     runCmds
-        (Shrink.cmdsForRun randomRun
-            |> Debug.log "x"
-        )
+        (Shrink.cmdsForRun randomRun)
         randomRun
         state
 
