@@ -6,6 +6,7 @@ module Microthesis.Generator exposing
     , bool
     , constant
     , filter
+    , generateWithSeed
     , int
     , lazy
     , map
@@ -362,3 +363,42 @@ lazy fn =
 unit : Generator ()
 unit =
     constant ()
+
+
+generateWithSeed : Random.Seed -> Generator a -> Maybe ( a, Random.Seed )
+generateWithSeed initSeed (Generator generator) =
+    let
+        fallbackSeed : Random.Seed -> Random.Seed
+        fallbackSeed seed =
+            seed
+                |> Random.step (Random.constant ())
+                |> Tuple.second
+
+        nextSeed : Random.Seed -> PRNG -> Random.Seed
+        nextSeed previousSeed prng =
+            case PRNG.getSeed prng of
+                Just seed ->
+                    seed
+
+                Nothing ->
+                    fallbackSeed previousSeed
+
+        go : Int -> Random.Seed -> Maybe ( a, Random.Seed )
+        go tries seed =
+            if tries <= 0 then
+                Nothing
+
+            else
+                case generator (PRNG.random seed) of
+                    Generated { value, prng } ->
+                        Just
+                            ( value
+                            , nextSeed seed prng
+                            )
+
+                    Rejected { prng } ->
+                        go
+                            (tries - 1)
+                            (nextSeed seed prng)
+    in
+    go 100 initSeed
