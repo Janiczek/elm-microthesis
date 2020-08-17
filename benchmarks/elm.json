@@ -13,7 +13,8 @@
             "elm/random": "1.0.0",
             "elm-community/array-extra": "2.3.0",
             "elm-community/list-extra": "8.2.4",
-            "elm-explorations/benchmark": "1.0.1"
+            "elm-explorations/benchmark": "1.0.1",
+            "turboMaCk/queue": "1.0.2"
         },
         "indirect": {
             "BrianHicks/elm-trend": "2.1.3",

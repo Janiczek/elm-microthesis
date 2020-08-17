@@ -108,7 +108,7 @@ type alias LoopState a =
     , valuesGenerated : Int
     , passingTests : Int
     , rejections : Dict String Int
-    , shrinkHistory : List ( a, RandomRun, Maybe ShrinkCmd )
+    , shrinkHistory : List ( a, RandomRun.RandomRun, Maybe ShrinkCmd )
     }
 
 
@@ -117,7 +117,7 @@ type Status a
     | Passing
     | FailingWith
         { value : a
-        , randomRun : RandomRun
+        , randomRun : RandomRun.RandomRun
         }
     | UnableToGenerate
 
@@ -173,7 +173,7 @@ shouldTryToGenerate state =
         && (state.generationAttempts < state.maxGenerationAttempts)
 
 
-generate : LoopState a -> Result (LoopState a) ( RandomRun, a, LoopState a )
+generate : LoopState a -> Result (LoopState a) ( RandomRun.RandomRun, a, LoopState a )
 generate state =
     case Generator.run state.generator (PRNG.random state.seed) of
         Generated { value, prng } ->
@@ -248,7 +248,7 @@ shrink state =
             state
 
 
-addShrinkToHistory : a -> RandomRun -> Maybe ShrinkCmd -> LoopState a -> LoopState a
+addShrinkToHistory : a -> RandomRun.RandomRun -> Maybe ShrinkCmd -> LoopState a -> LoopState a
 addShrinkToHistory value randomRun maybeCmd state =
     { state
         | shrinkHistory =
@@ -256,7 +256,7 @@ addShrinkToHistory value randomRun maybeCmd state =
     }
 
 
-shrinkWhileProgress : RandomRun -> LoopState a -> LoopState a
+shrinkWhileProgress : RandomRun.RandomRun -> LoopState a -> LoopState a
 shrinkWhileProgress randomRun state =
     let
         ( nextRun, nextState ) =
@@ -269,7 +269,7 @@ shrinkWhileProgress randomRun state =
         shrinkWhileProgress nextRun nextState
 
 
-shrinkOnce : RandomRun -> LoopState a -> ( RandomRun, LoopState a )
+shrinkOnce : RandomRun.RandomRun -> LoopState a -> ( RandomRun.RandomRun, LoopState a )
 shrinkOnce randomRun state =
     runCmds
         (Shrink.cmdsForRun randomRun)
@@ -290,14 +290,14 @@ toResult state =
             if state.options.showShrinkHistory then
                 FailsWithShrinks
                     { finalValue = value
-                    , finalRun = randomRun
+                    , finalRun = RandomRun.toList randomRun
                     , history =
                         state.shrinkHistory
                             |> List.reverse
                             |> List.map
                                 (\( value_, run_, maybeCmd ) ->
                                     { value = value_
-                                    , run = run_
+                                    , run = RandomRun.toList run_
                                     , shrinkerUsed =
                                         case maybeCmd of
                                             Nothing ->
@@ -324,14 +324,14 @@ toResult state =
 
 
 tryShrink :
-    { old : RandomRun
-    , new : RandomRun
+    { old : RandomRun.RandomRun
+    , new : RandomRun.RandomRun
     , cmd : ShrinkCmd
     }
     -> LoopState a
     ->
         { foundImprovement : Bool
-        , finalRun : RandomRun
+        , finalRun : RandomRun.RandomRun
         , finalState : LoopState a
         }
 tryShrink { old, new, cmd } state =
@@ -372,7 +372,7 @@ tryShrink { old, new, cmd } state =
                 nope
 
 
-runCmds : List ShrinkCmd -> RandomRun -> LoopState a -> ( RandomRun, LoopState a )
+runCmds : List ShrinkCmd -> RandomRun.RandomRun -> LoopState a -> ( RandomRun.RandomRun, LoopState a )
 runCmds cmds randomRun state =
     List.foldl
         runCmd
@@ -380,7 +380,7 @@ runCmds cmds randomRun state =
         cmds
 
 
-runCmd : ShrinkCmd -> ( RandomRun, LoopState a ) -> ( RandomRun, LoopState a )
+runCmd : ShrinkCmd -> ( RandomRun.RandomRun, LoopState a ) -> ( RandomRun.RandomRun, LoopState a )
 runCmd cmd ( randomRun, state ) =
     case cmd of
         DeleteChunkAndMaybeDecrementPrevious chunk ->
@@ -442,11 +442,11 @@ deleteChunkAndMaybeDecrementPrevious cmd chunk randomRun state =
         ( randomRun, state )
 
 
-replaceChunkWithZero : ShrinkCmd -> Chunk -> RandomRun -> LoopState a -> ( RandomRun, LoopState a )
+replaceChunkWithZero : ShrinkCmd -> Chunk -> RandomRun.RandomRun -> LoopState a -> ( RandomRun.RandomRun, LoopState a )
 replaceChunkWithZero cmd chunk randomRun state =
     if RandomRun.isInBounds chunk randomRun then
         let
-            shrunkRun : RandomRun
+            shrunkRun : RandomRun.RandomRun
             shrunkRun =
                 RandomRun.replaceChunkWithZero chunk randomRun
 
@@ -464,11 +464,11 @@ replaceChunkWithZero cmd chunk randomRun state =
         ( randomRun, state )
 
 
-sortChunk : ShrinkCmd -> Chunk -> RandomRun -> LoopState a -> ( RandomRun, LoopState a )
+sortChunk : ShrinkCmd -> Chunk -> RandomRun.RandomRun -> LoopState a -> ( RandomRun.RandomRun, LoopState a )
 sortChunk cmd chunk randomRun state =
     if RandomRun.isInBounds chunk randomRun then
         let
-            shrunkRun : RandomRun
+            shrunkRun : RandomRun.RandomRun
             shrunkRun =
                 RandomRun.sortChunk chunk randomRun
 
@@ -486,7 +486,7 @@ sortChunk cmd chunk randomRun state =
         ( randomRun, state )
 
 
-minimizeWithBinarySearch : ShrinkCmd -> { index : Int } -> RandomRun -> LoopState a -> ( RandomRun, LoopState a )
+minimizeWithBinarySearch : ShrinkCmd -> { index : Int } -> RandomRun.RandomRun -> LoopState a -> ( RandomRun.RandomRun, LoopState a )
 minimizeWithBinarySearch cmd { index } randomRun state =
     if
         RandomRun.isInBounds
@@ -515,7 +515,7 @@ minimizeWithBinarySearch cmd { index } randomRun state =
         ( randomRun, state )
 
 
-redistribute : ShrinkCmd -> { leftIndex : Int, rightIndex : Int } -> RandomRun -> LoopState a -> ( RandomRun, LoopState a )
+redistribute : ShrinkCmd -> { leftIndex : Int, rightIndex : Int } -> RandomRun.RandomRun -> LoopState a -> ( RandomRun.RandomRun, LoopState a )
 redistribute cmd options randomRun state =
     if
         RandomRun.isInBounds
@@ -565,14 +565,14 @@ redistribute cmd options randomRun state =
 type alias BinarySearchOptions a =
     { low : Int
     , high : Int
-    , run : RandomRun
+    , run : RandomRun.RandomRun
     , state : LoopState a
     , cmd : ShrinkCmd
-    , updateRun : Int -> RandomRun -> RandomRun
+    , updateRun : Int -> RandomRun.RandomRun -> RandomRun.RandomRun
     }
 
 
-binarySearchShrink : BinarySearchOptions a -> ( RandomRun, LoopState a )
+binarySearchShrink : BinarySearchOptions a -> ( RandomRun.RandomRun, LoopState a )
 binarySearchShrink ({ updateRun, low, state, cmd } as options) =
     let
         runWithLow =
@@ -593,7 +593,7 @@ binarySearchShrink ({ updateRun, low, state, cmd } as options) =
         binarySearchLoop options
 
 
-binarySearchLoop : BinarySearchOptions a -> ( RandomRun, LoopState a )
+binarySearchLoop : BinarySearchOptions a -> ( RandomRun.RandomRun, LoopState a )
 binarySearchLoop ({ low, high, updateRun, state, cmd } as options) =
     if low + 1 < high then
         let

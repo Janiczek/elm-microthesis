@@ -14,23 +14,21 @@ main =
 suite : Benchmark
 suite =
     Benchmark.describe "Microthesis"
-        [ {- benchmark_ "bool"
-                 Gen.bool
-             , benchmark_ "int 0 10"
-                 (Gen.int 10)
-             , benchmark_ "weightedBool 0.75"
-                 (Gen.weightedBool 0.75)
-             , benchmark_ "unit"
-                 Gen.unit
-             , benchmark_ "triple ints"
-                 (Gen.triple
-                     (Gen.int 10)
-                     (Gen.int 10)
-                     (Gen.int 10)
-                 )
-             ,
-          -}
-          benchmark_ "list of ints"
+        [ benchmark_ "bool"
+            Gen.bool
+        , benchmark_ "int 0 10"
+            (Gen.int 10)
+        , benchmark_ "weightedBool 0.75"
+            (Gen.weightedBool 0.75)
+        , benchmark_ "unit"
+            Gen.unit
+        , benchmark_ "triple ints"
+            (Gen.triple
+                (Gen.int 10)
+                (Gen.int 10)
+                (Gen.int 10)
+            )
+        , benchmark_ "list of ints"
             (Gen.list (Gen.int 10))
         ]
 
