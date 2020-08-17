@@ -9,6 +9,7 @@ module Microthesis.Generator exposing
     , generateWithSeed
     , int
     , lazy
+    , list
     , map
     , map2
     , map3
@@ -402,3 +403,29 @@ generateWithSeed initSeed (Generator generator) =
                             (nextSeed seed prng)
     in
     go 100 initSeed
+
+
+list : Generator a -> Generator (List a)
+list itemGenerator =
+    let
+        addItem : Int -> List a -> Generator (List a)
+        addItem accLength accList =
+            itemGenerator
+                |> andThen
+                    (\item ->
+                        go (accLength + 1) (item :: accList)
+                    )
+
+        go : Int -> List a -> Generator (List a)
+        go length acc =
+            weightedBool 0.8333333333333334
+                |> andThen
+                    (\coin ->
+                        if coin then
+                            addItem length acc
+
+                        else
+                            constant (List.reverse acc)
+                    )
+    in
+    go 0 []
