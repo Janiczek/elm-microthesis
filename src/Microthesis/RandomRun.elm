@@ -9,7 +9,6 @@ module Microthesis.RandomRun exposing
     , isEmpty
     , isInBounds
     , length
-    , nextChoice
     , replace
     , replaceChunkWithZero
     , set
@@ -19,12 +18,12 @@ module Microthesis.RandomRun exposing
     , update
     )
 
-import List.Extra
-import OurExtras.List
+import Array exposing (Array)
+import Array.Extra
 
 
 type alias RandomRun =
-    List Int
+    Array Int
 
 
 type alias Chunk =
@@ -35,30 +34,17 @@ type alias Chunk =
 
 empty : RandomRun
 empty =
-    []
+    Array.empty
 
 
 isEmpty : RandomRun -> Bool
 isEmpty run =
-    List.isEmpty run
-
-
-nextChoice : RandomRun -> Maybe ( Int, RandomRun )
-nextChoice run =
-    case run of
-        first :: rest ->
-            Just ( first, rest )
-
-        [] ->
-            Nothing
+    Array.isEmpty run
 
 
 append : Int -> RandomRun -> RandomRun
 append n run =
-    {- NOTE: inefficient, reversed list would be more performant but might make
-       the logic impenetrable
-    -}
-    run ++ [ n ]
+    Array.push n run
 
 
 isInBounds : Chunk -> RandomRun -> Bool
@@ -68,54 +54,54 @@ isInBounds { startIndex, size } randomRun =
 
 length : RandomRun -> Int
 length run =
-    List.length run
-
-
-getChunk : Chunk -> RandomRun -> List Int
-getChunk chunk run =
-    run
-        |> List.drop chunk.startIndex
-        |> List.take chunk.size
+    Array.length run
 
 
 deleteChunk : Chunk -> RandomRun -> RandomRun
-deleteChunk chunk run =
-    List.take chunk.startIndex run
-        ++ List.drop (chunk.startIndex + chunk.size) run
+deleteChunk { size, startIndex } run =
+    Array.append
+        -- before
+        (Array.slice 0 startIndex run)
+        -- after
+        (Array.slice (startIndex + size) (Array.length run) run)
 
 
 replaceChunkWithZero : Chunk -> RandomRun -> RandomRun
-replaceChunkWithZero chunk run =
-    -- TODO maybe `replace [...] run` would be faster?
-    OurExtras.List.fastConcat
-        [ List.take chunk.startIndex run
-        , List.repeat chunk.size 0
-        , List.drop (chunk.startIndex + chunk.size) run
-        ]
+replaceChunkWithZero { size, startIndex } run =
+    Array.append
+        (Array.append
+            -- before
+            (Array.slice 0 startIndex run)
+            -- zeros
+            (Array.repeat size 0)
+        )
+        -- after
+        (Array.slice (startIndex + size) (Array.length run) run)
 
 
 sortChunk : Chunk -> RandomRun -> RandomRun
-sortChunk chunk run =
+sortChunk { size, startIndex } run =
     let
-        sortedIndexed : List ( Int, Int )
-        sortedIndexed =
-            run
-                |> getChunk chunk
+        chunk : Array Int
+        chunk =
+            Array.slice startIndex (startIndex + size) run
+
+        sortedIndexedChunk : List ( Int, Int )
+        sortedIndexedChunk =
+            chunk
+                |> Array.toList
                 |> List.sort
-                |> List.indexedMap
-                    (\i value -> ( chunk.startIndex + i, value ))
+                |> List.indexedMap (\i value -> ( startIndex + i, value ))
     in
-    replace sortedIndexed run
+    replace sortedIndexedChunk run
 
 
 replace : List ( Int, Int ) -> RandomRun -> RandomRun
-replace values run =
+replace replacements run =
     List.foldl
-        (\( index, newValue ) accRun ->
-            List.Extra.setAt index newValue accRun
-        )
+        (\( i, value ) acc -> Array.set i value acc)
         run
-        values
+        replacements
 
 
 swapIfOutOfOrder :
@@ -147,24 +133,24 @@ swapIfOutOfOrder { leftIndex, rightIndex } run =
                 , newRightValue = right
                 }
         )
-        (List.Extra.getAt leftIndex run)
-        (List.Extra.getAt rightIndex run)
+        (get leftIndex run)
+        (get rightIndex run)
 
 
 get : Int -> RandomRun -> Maybe Int
 get index randomRun =
-    List.Extra.getAt index randomRun
+    Array.get index randomRun
 
 
 set : Int -> Int -> RandomRun -> RandomRun
 set index value randomRun =
-    List.Extra.setAt index value randomRun
+    Array.set index value randomRun
 
 
 sortKey : RandomRun -> ( Int, List Int )
 sortKey run =
     ( length run
-    , run
+    , toList run
     )
 
 
@@ -175,7 +161,7 @@ compare a b =
 
 toList : RandomRun -> List Int
 toList run =
-    run
+    Array.toList run
 
 
 update : Int -> (Int -> Int) -> RandomRun -> RandomRun

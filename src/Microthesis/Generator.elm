@@ -99,19 +99,22 @@ rollDice diceGenerator =
                         }
 
                 Hardcoded hardcoded ->
-                    case RandomRun.nextChoice hardcoded.unusedPart of
+                    case RandomRun.get hardcoded.unusedIndex hardcoded.run of
                         Nothing ->
                             Rejected
                                 { reason = "Hardcoded PRNG run out of numbers"
                                 , prng = prng
                                 }
 
-                        Just ( hardcodedChoice, restOfChoices ) ->
+                        Just hardcodedChoice ->
                             Generated
                                 { value = hardcodedChoice
                                 , prng =
                                     Hardcoded
-                                        { hardcoded | unusedPart = restOfChoices }
+                                        { hardcoded
+                                            | unusedIndex =
+                                                hardcoded.unusedIndex + 1
+                                        }
                                 }
 
 

@@ -10,8 +10,8 @@ type PRNG
         , run : RandomRun
         }
     | Hardcoded
-        { wholeRun : RandomRun
-        , unusedPart : RandomRun
+        { run : RandomRun
+        , unusedIndex : Int
         }
 
 
@@ -26,8 +26,8 @@ random seed =
 hardcoded : RandomRun -> PRNG
 hardcoded run =
     Hardcoded
-        { wholeRun = run
-        , unusedPart = run
+        { run = run
+        , unusedIndex = 0
         }
 
 
@@ -37,8 +37,8 @@ getRun prng =
         Random { run } ->
             run
 
-        Hardcoded { wholeRun } ->
-            wholeRun
+        Hardcoded { run } ->
+            run
 
 
 getSeed : PRNG -> Maybe Random.Seed

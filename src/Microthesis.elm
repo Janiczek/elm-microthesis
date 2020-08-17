@@ -1,5 +1,5 @@
 module Microthesis exposing
-    ( RandomRun
+    ( PrngHistory
     , Test, test
     , Options, defaultOptions
     , run, runWith, TestResult(..), Bug(..)
@@ -7,7 +7,7 @@ module Microthesis exposing
 
 {-|
 
-@docs RandomRun
+@docs PrngHistory
 
 @docs Test, test
 
@@ -68,7 +68,7 @@ test label generator userTestFn =
         }
 
 
-type alias RandomRun =
+type alias PrngHistory =
     List Int
 
 
@@ -77,11 +77,11 @@ type TestResult a
     | FailsWith a
     | FailsWithShrinks
         { finalValue : a
-        , finalRun : RandomRun
+        , finalRun : PrngHistory
         , history :
             List
                 { value : a
-                , run : RandomRun
+                , run : PrngHistory
                 , shrinkerUsed : String
                 }
         }
@@ -290,14 +290,14 @@ toResult state =
             if state.options.showShrinkHistory then
                 FailsWithShrinks
                     { finalValue = value
-                    , finalRun = randomRun
+                    , finalRun = RandomRun.toList randomRun
                     , history =
                         state.shrinkHistory
                             |> List.reverse
                             |> List.map
                                 (\( value_, run_, maybeCmd ) ->
                                     { value = value_
-                                    , run = run_
+                                    , run = RandomRun.toList run_
                                     , shrinkerUsed =
                                         case maybeCmd of
                                             Nothing ->
@@ -399,11 +399,11 @@ runCmd cmd ( randomRun, state ) =
             redistribute cmd options randomRun state
 
 
-deleteChunkAndMaybeDecrementPrevious : ShrinkCmd -> Chunk -> RandomRun.RandomRun -> LoopState a -> ( RandomRun.RandomRun, LoopState a )
+deleteChunkAndMaybeDecrementPrevious : ShrinkCmd -> Chunk -> RandomRun -> LoopState a -> ( RandomRun, LoopState a )
 deleteChunkAndMaybeDecrementPrevious cmd chunk randomRun state =
     if RandomRun.isInBounds chunk randomRun then
         let
-            runWithDelete : RandomRun.RandomRun
+            runWithDelete : RandomRun
             runWithDelete =
                 RandomRun.deleteChunk chunk randomRun
 
@@ -420,7 +420,7 @@ deleteChunkAndMaybeDecrementPrevious cmd chunk randomRun state =
                the length parameter.
             -}
             let
-                runWithDecrement : RandomRun.RandomRun
+                runWithDecrement : RandomRun
                 runWithDecrement =
                     runWithDelete
                         |> RandomRun.update (chunk.startIndex - 1) (\x -> x - 1)
