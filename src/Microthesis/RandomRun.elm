@@ -15,6 +15,8 @@ module Microthesis.RandomRun exposing
     , set
     , sortChunk
     , swapIfOutOfOrder
+    , toList
+    , update
     )
 
 import List.Extra
@@ -161,7 +163,7 @@ set index value randomRun =
 
 sortKey : RandomRun -> ( Int, List Int )
 sortKey run =
-    ( List.length run
+    ( length run
     , run
     )
 
@@ -169,3 +171,26 @@ sortKey run =
 compare : RandomRun -> RandomRun -> Order
 compare a b =
     Basics.compare (sortKey a) (sortKey b)
+
+
+toList : RandomRun -> List Int
+toList run =
+    run
+
+
+update : Int -> (Int -> Int) -> RandomRun -> RandomRun
+update index fn run =
+    case get index run of
+        Nothing ->
+            run
+
+        Just value ->
+            let
+                newValue =
+                    fn value
+            in
+            if newValue < 0 then
+                run
+
+            else
+                replace [ ( index, fn value ) ] run

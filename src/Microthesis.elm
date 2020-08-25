@@ -384,7 +384,7 @@ runCmd : ShrinkCmd -> ( RandomRun, LoopState a ) -> ( RandomRun, LoopState a )
 runCmd cmd ( randomRun, state ) =
     case cmd of
         DeleteChunkAndMaybeDecrementPrevious chunk ->
-            deleteChunk cmd chunk randomRun state
+            deleteChunkAndMaybeDecrementPrevious cmd chunk randomRun state
 
         ReplaceChunkWithZero chunk ->
             replaceChunkWithZero cmd chunk randomRun state
@@ -399,23 +399,44 @@ runCmd cmd ( randomRun, state ) =
             redistribute cmd options randomRun state
 
 
-deleteChunk : ShrinkCmd -> Chunk -> RandomRun -> LoopState a -> ( RandomRun, LoopState a )
-deleteChunk cmd chunk randomRun state =
+deleteChunkAndMaybeDecrementPrevious : ShrinkCmd -> Chunk -> RandomRun.RandomRun -> LoopState a -> ( RandomRun.RandomRun, LoopState a )
+deleteChunkAndMaybeDecrementPrevious cmd chunk randomRun state =
     if RandomRun.isInBounds chunk randomRun then
         let
-            shrunkRun : RandomRun
-            shrunkRun =
+            runWithDelete : RandomRun.RandomRun
+            runWithDelete =
                 RandomRun.deleteChunk chunk randomRun
 
-            { finalRun, finalState } =
+            afterDelete =
                 tryShrink
                     { old = randomRun
-                    , new = shrunkRun
+                    , new = runWithDelete
                     , cmd = cmd
                     }
                     state
         in
-        ( finalRun, finalState )
+        if afterDelete.foundImprovement then
+            {- Try reducing the number before this removed chunk, it's frequently
+               the length parameter.
+            -}
+            let
+                runWithDecrement : RandomRun.RandomRun
+                runWithDecrement =
+                    runWithDelete
+                        |> RandomRun.update (chunk.startIndex - 1) (\x -> x - 1)
+
+                afterDecrement =
+                    tryShrink
+                        { old = afterDelete.finalRun
+                        , new = runWithDecrement
+                        , cmd = cmd
+                        }
+                        afterDelete.finalState
+            in
+            ( afterDecrement.finalRun, afterDecrement.finalState )
+
+        else
+            ( afterDelete.finalRun, afterDelete.finalState )
 
     else
         ( randomRun, state )
