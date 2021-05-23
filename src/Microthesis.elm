@@ -402,41 +402,45 @@ runCmd cmd ( randomRun, state ) =
 deleteChunkAndMaybeDecrementPrevious : ShrinkCmd -> Chunk -> RandomRun.RandomRun -> LoopState a -> ( RandomRun.RandomRun, LoopState a )
 deleteChunkAndMaybeDecrementPrevious cmd chunk randomRun state =
     if RandomRun.isInBounds chunk randomRun then
+        -- First try doing both.
         let
-            runWithDelete : RandomRun.RandomRun
-            runWithDelete =
-                RandomRun.deleteChunk chunk randomRun
+            runWithBoth : RandomRun
+            runWithBoth =
+                randomRun
+                    |> RandomRun.deleteChunk chunk
+                    |> RandomRun.update (chunk.startIndex - 1) (\x -> x - 1)
 
-            afterDelete =
+            afterBoth =
                 tryShrink
                     { old = randomRun
-                    , new = runWithDelete
+                    , new = runWithBoth
                     , cmd = cmd
                     }
                     state
         in
-        if afterDelete.foundImprovement then
-            {- Try reducing the number before this removed chunk, it's frequently
-               the length parameter.
-            -}
-            let
-                runWithDecrement : RandomRun.RandomRun
-                runWithDecrement =
-                    runWithDelete
-                        |> RandomRun.update (chunk.startIndex - 1) (\x -> x - 1)
-
-                afterDecrement =
-                    tryShrink
-                        { old = afterDelete.finalRun
-                        , new = runWithDecrement
-                        , cmd = cmd
-                        }
-                        afterDelete.finalState
-            in
-            ( afterDecrement.finalRun, afterDecrement.finalState )
+        if afterBoth.foundImprovement then
+            ( afterBoth.finalRun, afterBoth.finalState )
 
         else
-            ( afterDelete.finalRun, afterDelete.finalState )
+            -- Doing both didn't work, so try at least the deletion
+            let
+                runWithDelete : RandomRun
+                runWithDelete =
+                    RandomRun.deleteChunk chunk randomRun
+
+                afterDelete =
+                    tryShrink
+                        { old = randomRun
+                        , new = runWithDelete
+                        , cmd = cmd
+                        }
+                        state
+            in
+            if afterDelete.foundImprovement then
+                ( afterDelete.finalRun, afterDelete.finalState )
+
+            else
+                ( randomRun, state )
 
     else
         ( randomRun, state )
